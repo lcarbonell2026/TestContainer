@@ -2,15 +2,18 @@ name: STAGING - Deploy Kubernetes
 
 on:
   push:
-    branches: [ "master" ]   # tu repo usa master
+    branches: [ "master" ]
 
 permissions:
   contents: read
-  packages: write    # necesario para usar GITHUB_TOKEN con GHCR
+  packages: write
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./TestContainer   # 👈 carpeta con tu Dockerfile y YAMLs
     steps:
       - uses: actions/checkout@v3
 
@@ -26,14 +29,16 @@ jobs:
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./TestContainer   # 👈 aplicar manifiestos desde la misma carpeta
     steps:
       - uses: actions/checkout@v3
 
-      # ✅ Instalar kubectl en el runner ANTES de usar kubectl
       - name: Instalar kubectl
         uses: azure/setup-kubectl@v4
         with:
-          version: 'latest'   # o fija una versión (p.ej. v1.29.3)
+          version: 'latest'
 
       - name: Configurar kubeconfig STAGING
         run: |
