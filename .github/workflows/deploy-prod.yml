@@ -1,0 +1,46 @@
+name: PRODUCCION - Deploy Kubernetes
+
+on:
+  push:
+    branches: [ "prod" ]   # Se ejecuta cuando haces push a la rama prod
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v3
+
+      - name: Login en GHCR
+        run: echo "${{ secrets.CR_PAT_PROD }}" | docker login ghcr.io -u lcarbonell2026 --password-stdin
+
+      - name: Build imagen producción
+        run: docker build -t ghcr.io/lcarbonell2026/myapp-api:prod .
+
+      - name: Push imagen producción
+        run: docker push ghcr.io/lcarbonell2026/myapp-api:prod
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Configurar kubeconfig PRODUCCIÓN
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_PROD }}" > ~/.kube/config
+
+      - name: Aplicar manifiestos en PRODUCCIÓN
+        run: |
+          kubectl apply -f deployment-prod.yaml
+          kubectl apply -f service-prod.yaml
+          kubectl apply -f ingress-prod.yaml
+
+      - name: Ver estado del rollout
+        run: |
+          kubectl -n production rollout status deploy/myapp-api
+          kubectl -n production get pods -o wide
