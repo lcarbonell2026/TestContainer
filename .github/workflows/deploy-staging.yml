@@ -5,7 +5,7 @@ on:
     branches: [ "master" ]
   workflow_dispatch: {}
 
-# 🔐 Imprescindible para publicar en GHCR con GITHUB_TOKEN
+# 🔐 Necesario para publicar en GHCR con GITHUB_TOKEN
 permissions:
   contents: read
   packages: write
@@ -22,7 +22,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Diagnóstico
+      - name: Diagnóstico (árbol del repo)
         run: ls -lahR .
 
       - name: Login GHCR (GITHUB_TOKEN)
@@ -43,7 +43,28 @@ jobs:
       - name: Instalar kubectl
         uses: azure/setup-kubectl@v4
 
-      - name: Aplicar manifiestos
+      # ⬇️ Nuevo: escribir kubeconfig desde secreto (texto plano o base64)
+      - name: Configurar KUBECONFIG (STAGING)
+        if: ${{ secrets.KUBECONFIG_STAGING != '' }}
+        shell: bash
+        run: |
+          mkdir -p $HOME/.kube
+          if echo "${KUBECONFIG_STAGING}" | head -n1 | grep -q "apiVersion:"; then
+            echo "${KUBECONFIG_STAGING}" > $HOME/.kube/config
+          else
+            echo "${KUBECONFIG_STAGING}" | base64 -d > $HOME/.kube/config
+          fi
+          chmod 600 $HOME/.kube/config
+        env:
+          KUBECONFIG_STAGING: ${{ secrets.KUBECONFIG_STAGING }}
+
+      - name: Probar conexión a clúster
+        run: |
+          kubectl version --short
+          kubectl get ns
+          kubectl -n staging get deploy,svc,ingress
+
+      - name: Aplicar manifiestos (STAGING)
         run: |
           kubectl -n staging apply -f TestContainer/deployment.yaml
           kubectl -n staging apply -f TestContainer/service.yaml
@@ -51,5 +72,5 @@ jobs:
 
       - name: Esperar rollout
         run: |
-          kubectl -n staging rollout status deploy/myapp-api --timeout=180s
+          kubectl -n staging rollout status deploy/myapp-api --timeout=300s
           kubectl -n staging get pods -o wide
