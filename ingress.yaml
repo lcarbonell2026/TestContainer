@@ -9,7 +9,7 @@ spec:
     - host: miapp-staging-api.local
       http:
         paths:
-          - path: /weatherforecast
+          - path: /
             pathType: Prefix
             backend:
               service:
