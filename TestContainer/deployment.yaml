@@ -20,7 +20,7 @@ spec:
       containers:
         - name: myapp-api
           image: ghcr.io/lcarbonell2026/myapp-api:staging
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
           env:
