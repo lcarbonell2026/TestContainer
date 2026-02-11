@@ -29,5 +29,8 @@ namespace TestContainer.Controllers
             })
             .ToArray();
         }
+
+        [HttpGet("hola")]
+        public string Hola() => "Hola Luis, cambio desde CI/CD automatizado!";
     }
 }

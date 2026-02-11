@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp-api
+  namespace: production
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: myapp-api
+  template:
+    metadata:
+      labels:
+        app: myapp-api
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      containers:
+        - name: myapp-api
+          image: ghcr.io/lcarbonell2026/myapp-api:prod
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /weatherforecast
+              port: 8080
+            initialDelaySeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /weatherforecast
+              port: 8080
+            initialDelaySeconds: 30
