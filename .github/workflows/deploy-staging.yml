@@ -2,7 +2,7 @@ name: STAGING - Deploy Kubernetes
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "master" ]
 
 jobs:
 
