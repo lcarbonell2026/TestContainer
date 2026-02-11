@@ -1,0 +1,45 @@
+name: STAGING - Deploy Kubernetes
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Login GHCR
+        run: echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u lcarbonell2026 --password-stdin
+
+      - name: Build image (staging)
+        run: docker build -t ghcr.io/lcarbonell2026/myapp-api:staging .
+
+      - name: Push image (staging)
+        run: docker push ghcr.io/lcarbonell2026/myapp-api:staging
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Configurar kubeconfig STAGING
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+
+      - name: Aplicar manifiestos STAGING
+        run: |
+          kubectl apply -f deployment.yaml
+          kubectl apply -f service.yaml
+          kubectl apply -f ingress.yaml
+
+      - name: Esperar rollout STAGING
+        run: |
+          kubectl -n staging rollout status deploy/myapp-api
+          kubectl -n staging get pods -o wide
