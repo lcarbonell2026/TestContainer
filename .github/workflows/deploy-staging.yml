@@ -1,5 +1,5 @@
 name: STAGING – Build & Deploy
-
+# <- habilita el botón "Run "
 on:
   push:
     branches: [ "master" ]
