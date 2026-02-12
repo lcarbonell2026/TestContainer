@@ -65,7 +65,6 @@ jobs:
 
       # 6) Escribir KUBECONFIG (acepta texto o base64)
       - name: Configurar KUBECONFIG (STAGING)
-        if: ${{ secrets.KUBECONFIG_STAGING != '' }}
         shell: bash
         run: |
           mkdir -p $HOME/.kube
