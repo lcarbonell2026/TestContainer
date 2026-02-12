@@ -80,4 +80,3 @@ jobs:
         run: |
           kubectl -n prod rollout status deploy/myapp-api --timeout=300s
           kubectl -n prod get pods -o wide
-``

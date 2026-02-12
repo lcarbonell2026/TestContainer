@@ -113,4 +113,3 @@ jobs:
           kubectl -n staging get pods -o wide
           echo "Ingress en staging:"
           kubectl -n staging describe ingress myapp-api || true
-``
