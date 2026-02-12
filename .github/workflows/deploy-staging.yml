@@ -80,7 +80,7 @@ jobs:
       # 7) Prueba de conexión al clúster (antes de aplicar)
       - name: Probar conexión a clúster
         run: |
-          kubectl version --short
+          kubectl version --client=true
           kubectl get ns
           kubectl -n staging get deploy,svc,ingress || true
           echo "RBAC quick check:"
