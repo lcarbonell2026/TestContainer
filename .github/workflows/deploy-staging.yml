@@ -1,22 +1,15 @@
-<<<<<<< HEAD
 name: STAGING – Build & Deploy
-=======
-name: STAGING - Build & Deploy
->>>>>>> 3c2295b0206d619889e590d87ab0b23db10907c9
-
 on:
   push:
     branches: [ "master" ]
   workflow_dispatch:
 
-<<<<<<< HEAD
 # Permite publicar a GHCR usando GITHUB_TOKEN
-=======
->>>>>>> 3c2295b0206d619889e590d87ab0b23db10907c9
 permissions:
   contents: read
   packages: write
 
+# Evita superponer ejecuciones si lanzas varias seguidas
 concurrency:
   group: staging-deploy
   cancel-in-progress: true
@@ -29,26 +22,20 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
+      # 1) Traer código
       - name: Checkout
         uses: actions/checkout@v4
 
-<<<<<<< HEAD
       # 2) Diagnóstico de estructura del repo (útil cuando algo falla)
       - name: Diagnóstico (árbol del repo)
-=======
-      - name: Diagnose repository layout
->>>>>>> 3c2295b0206d619889e590d87ab0b23db10907c9
         run: |
           echo "Branch: ${{ github.ref }}"
           pwd
           ls -lah
-          echo "Contents of TestContainer/"
+          echo "Contenido de TestContainer/"
           ls -lah TestContainer
 
-<<<<<<< HEAD
       # 3) Login a GHCR con GITHUB_TOKEN (usa permissions de arriba)
-=======
->>>>>>> 3c2295b0206d619889e590d87ab0b23db10907c9
       - name: Login GHCR (GITHUB_TOKEN)
         uses: docker/login-action@v3
         with:
@@ -56,7 +43,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & Push image (TestContainer)
+      # 4) Build & push de la imagen usando la subcarpeta del proyecto .NET
+      - name: Build & Push (carpeta TestContainer)
         uses: docker/build-push-action@v5
         with:
           context: ./TestContainer
@@ -69,37 +57,29 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Setup kubectl
+      # 5) Instalar kubectl
+      - name: Instalar kubectl
         uses: azure/setup-kubectl@v4
         with:
           version: 'latest'
 
-<<<<<<< HEAD
       # 6) Escribir KUBECONFIG (acepta texto o base64)
       - name: Configurar KUBECONFIG (STAGING)
         if: ${{ secrets.KUBECONFIG_STAGING != '' }}
-=======
-      # Escribir KUBECONFIG desde el secreto (texto plano o base64)
-      - name: Configure KUBECONFIG (STAGING)
->>>>>>> 3c2295b0206d619889e590d87ab0b23db10907c9
         shell: bash
         run: |
-          mkdir -p "$HOME/.kube"
+          mkdir -p $HOME/.kube
           if echo "${KUBECONFIG_STAGING}" | head -n1 | grep -q "apiVersion:"; then
-            printf "%s" "${KUBECONFIG_STAGING}" > "$HOME/.kube/config"
+            echo "${KUBECONFIG_STAGING}" > $HOME/.kube/config
           else
-            echo "${KUBECONFIG_STAGING}" | base64 -d > "$HOME/.kube/config"
+            echo "${KUBECONFIG_STAGING}" | base64 -d > $HOME/.kube/config
           fi
-          chmod 600 "$HOME/.kube/config"
+          chmod 600 $HOME/.kube/config
         env:
           KUBECONFIG_STAGING: ${{ secrets.KUBECONFIG_STAGING }}
 
-<<<<<<< HEAD
       # 7) Prueba de conexión al clúster (antes de aplicar)
       - name: Probar conexión a clúster
-=======
-      - name: Check cluster connectivity
->>>>>>> 3c2295b0206d619889e590d87ab0b23db10907c9
         run: |
           kubectl version --short
           kubectl get ns
@@ -108,24 +88,13 @@ jobs:
           kubectl auth can-i apply deployments -n staging
           kubectl auth can-i get pods -n staging
 
-<<<<<<< HEAD
       # 8) Aplicar manifiestos declarativos
       - name: Aplicar manifiestos (STAGING)
-=======
-      - name: Pin image to :staging in deployment.yaml
-        run: |
-          sed -i "s|image: .*|image: $IMAGE_NAME:$IMAGE_TAG|g" ./TestContainer/deployment.yaml
-          echo "deployment.yaml after sed:"
-          sed -n '1,200p' ./TestContainer/deployment.yaml
-
-      - name: Apply manifests (STAGING)
->>>>>>> 3c2295b0206d619889e590d87ab0b23db10907c9
         run: |
           kubectl -n staging apply -f TestContainer/deployment.yaml
           kubectl -n staging apply -f TestContainer/service.yaml
           kubectl -n staging apply -f TestContainer/ingress.yaml
 
-<<<<<<< HEAD
       # 9) Ajustar la imagen con el tag inmutable (SHA)
       #    Esto garantiza reproducibilidad, incluso si 'deployment.yaml' usa 'staging'
       - name: Forzar imagen a sha-${{ github.sha }}
@@ -138,18 +107,10 @@ jobs:
 
       # 10) Esperar rollout y mostrar estado
       - name: Esperar rollout
-=======
-      - name: Wait for rollout
->>>>>>> 3c2295b0206d619889e590d87ab0b23db10907c9
         run: |
           kubectl -n staging rollout status deploy/myapp-api --timeout=300s
-          echo "Pods in staging:"
+          echo "Pods en staging:"
           kubectl -n staging get pods -o wide
-<<<<<<< HEAD
           echo "Ingress en staging:"
           kubectl -n staging describe ingress myapp-api || true
 ``
-=======
-          echo "Ingress in staging:"
-          kubectl -n staging describe ingress myapp-api | sed -n '/Rules/,$p'
->>>>>>> 3c2295b0206d619889e590d87ab0b23db10907c9
