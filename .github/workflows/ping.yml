@@ -1,13 +1,10 @@
 name: ping
-
 on:
+  workflow_dispatch:
   push:
     branches: [ "master" ]
-  workflow_dispatch:
-
 jobs:
   hello:
     runs-on: ubuntu-latest
     steps:
-      - name: Echo hello
-        run: echo "Ping OK: ${{ github.ref }}  run_id=${{ github.run_id }}"
+      - run: echo "Ping OK: ${{ github.ref }} | run_id=${{ github.run_id }}"
