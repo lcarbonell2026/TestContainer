@@ -1,11 +1,11 @@
 name: STAGING – Build & Deploy
-# <- habilita el botón "Run "
+
 on:
   push:
     branches: [ "master" ]
-  workflow_dispatch:   # <- habilita el botón "Run workflow"
+  workflow_dispatch:
 
-# Permisos necesarios para que el GITHUB_TOKEN publique en GHCR
+# Permite publicar a GHCR usando GITHUB_TOKEN
 permissions:
   contents: read
   packages: write
@@ -22,13 +22,12 @@ env:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-
     steps:
       # 1) Traer código
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 2) Diagnóstico de estructura del repo
+      # 2) Diagnóstico de estructura del repo (útil cuando algo falla)
       - name: Diagnóstico (árbol del repo)
         run: |
           echo "Branch: ${{ github.ref }}"
@@ -37,7 +36,7 @@ jobs:
           echo "Contenido de TestContainer/"
           ls -lah TestContainer
 
-      # 3) Login a GHCR con GITHUB_TOKEN (ya habilitaste Read & Write en Settings → Actions)
+      # 3) Login a GHCR con GITHUB_TOKEN (usa permissions de arriba)
       - name: Login GHCR (GITHUB_TOKEN)
         uses: docker/login-action@v3
         with:
@@ -52,7 +51,12 @@ jobs:
           context: ./TestContainer
           file: ./TestContainer/Dockerfile
           push: true
-          tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          # Publica dos tags: 'staging' + 'sha-<commit>'
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+            ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       # 5) Instalar kubectl
       - name: Instalar kubectl
@@ -60,7 +64,7 @@ jobs:
         with:
           version: 'latest'
 
-      # 6) Escribir KUBECONFIG (funciona si guardaste el secreto en texto plano o en base64)
+      # 6) Escribir KUBECONFIG (acepta texto o base64)
       - name: Configurar KUBECONFIG (STAGING)
         if: ${{ secrets.KUBECONFIG_STAGING != '' }}
         shell: bash
@@ -75,27 +79,32 @@ jobs:
         env:
           KUBECONFIG_STAGING: ${{ secrets.KUBECONFIG_STAGING }}
 
-      # 7) Prueba de conexión al cluster (antes de aplicar)
+      # 7) Prueba de conexión al clúster (antes de aplicar)
       - name: Probar conexión a clúster
         run: |
           kubectl version --short
           kubectl get ns
           kubectl -n staging get deploy,svc,ingress || true
+          echo "RBAC quick check:"
+          kubectl auth can-i apply deployments -n staging
+          kubectl auth can-i get pods -n staging
 
-      # 8) (Opcional) Alinear imagen en el deployment.yaml al tag esperado del job
-      #    Si tu archivo ya tiene :staging, puedes omitir este paso.
-      - name: Reemplazar imagen en deployment.yaml a :staging
-        run: |
-          sed -i "s|image: .*|image: $IMAGE_NAME:$IMAGE_TAG|g" ./TestContainer/deployment.yaml
-          echo "deployment.yaml tras sed:"
-          sed -n '1,180p' ./TestContainer/deployment.yaml
-
-      # 9) Aplicar manifiestos
+      # 8) Aplicar manifiestos declarativos
       - name: Aplicar manifiestos (STAGING)
         run: |
           kubectl -n staging apply -f TestContainer/deployment.yaml
           kubectl -n staging apply -f TestContainer/service.yaml
           kubectl -n staging apply -f TestContainer/ingress.yaml
+
+      # 9) Ajustar la imagen con el tag inmutable (SHA)
+      #    Esto garantiza reproducibilidad, incluso si 'deployment.yaml' usa 'staging'
+      - name: Forzar imagen a sha-${{ github.sha }}
+        env:
+          SHA_TAG: sha-${{ github.sha }}
+        run: |
+          kubectl -n staging set image deploy/myapp-api myapp-api=${IMAGE_NAME}:${SHA_TAG}
+          echo "Imagen efectiva:"
+          kubectl -n staging get deploy myapp-api -o=jsonpath='{.spec.template.spec.containers[0].image}'; echo
 
       # 10) Esperar rollout y mostrar estado
       - name: Esperar rollout
@@ -104,4 +113,5 @@ jobs:
           echo "Pods en staging:"
           kubectl -n staging get pods -o wide
           echo "Ingress en staging:"
-          kubectl -n staging describe ingress myapp-api | sed -n '/Rules/,$p'
+          kubectl -n staging describe ingress myapp-api || true
+``

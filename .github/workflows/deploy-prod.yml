@@ -5,10 +5,10 @@ on:
     branches: [ "prod" ]
   workflow_dispatch: {}
 
-# Si quieres usar GITHUB_TOKEN para publicar en GHCR (igual que staging):
-# permissions:
-#   contents: read
-#   packages: write
+# Recomendado también concurrency en prod (no cancelar en progreso)
+concurrency:
+  group: prod-deploy
+  cancel-in-progress: false
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/myapp-api
@@ -21,15 +21,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ⬇️ Opción A: Login con GITHUB_TOKEN (si activaste permissions arriba y repo Settings → Actions → Read & Write)
-      # - name: Login GHCR (GITHUB_TOKEN)
-      #   uses: docker/login-action@v3
-      #   with:
-      #     registry: ghcr.io
-      #     username: ${{ github.actor }}
-      #     password: ${{ secrets.GITHUB_TOKEN }}
-
-      # ⬇️ Opción B: Login con PAT (como ya tienes en secretos)
+      # Login GHCR con PAT (como ya tienes configurado en secretos)
       - name: Login GHCR (PAT)
         uses: docker/login-action@v3
         with:
@@ -43,7 +35,12 @@ jobs:
           context: ./TestContainer
           file: ./TestContainer/Dockerfile
           push: true
-          tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          # Publica 'prod' + 'sha-<commit>'
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+            ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Instalar kubectl
         uses: azure/setup-kubectl@v4
@@ -54,8 +51,6 @@ jobs:
         shell: bash
         run: |
           mkdir -p $HOME/.kube
-          # Si guardaste el kubeconfig en texto plano en el secreto, lo escribe tal cual.
-          # Si lo guardaste en base64, lo decodifica automáticamente.
           if echo "${KUBECONFIG_PROD}" | head -n1 | grep -q "apiVersion:"; then
             echo "${KUBECONFIG_PROD}" > $HOME/.kube/config
           else
@@ -65,19 +60,25 @@ jobs:
         env:
           KUBECONFIG_PROD: ${{ secrets.KUBECONFIG_PROD }}
 
-      # Si tu deployment-prod.yaml tiene "image: ..." puedes forzar el reemplazo:
-      - name: Reemplazar imagen a :prod
-        run: |
-          sed -i "s|image: .*|image: $IMAGE_NAME:$IMAGE_TAG|g" ./TestContainer/deployment-prod.yaml
-
+      # Aplica manifiestos de prod
       - name: Aplicar manifiestos PROD (namespace prod)
         run: |
           kubectl -n prod apply -f ./TestContainer/deployment-prod.yaml
           kubectl -n prod apply -f ./TestContainer/service-prod.yaml
           kubectl -n prod apply -f ./TestContainer/ingress-prod.yaml
 
+      # Forzar imagen al tag inmutable (SHA)
+      - name: Forzar imagen a sha-${{ github.sha }}
+        env:
+          SHA_TAG: sha-${{ github.sha }}
+        run: |
+          kubectl -n prod set image deploy/myapp-api myapp-api=${IMAGE_NAME}:${SHA_TAG}
+          echo "Imagen efectiva:"
+          kubectl -n prod get deploy myapp-api -o=jsonpath='{.spec.template.spec.containers[0].image}'; echo
+
+      # Esperar rollout + estado
       - name: Esperar rollout
         run: |
-          kubectl -n prod rollout status deploy/myapp-api --timeout=180s
+          kubectl -n prod rollout status deploy/myapp-api --timeout=300s
           kubectl -n prod get pods -o wide
 ``
