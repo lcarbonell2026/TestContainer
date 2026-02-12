@@ -4,7 +4,7 @@ on:
     branches: [ "master" ]
   workflow_dispatch:
 
-# Permite publicar a GHCR usando GITHUB_TOKEN
+# Permite publicar a GHCR usando GITHUB_TOKEN es
 permissions:
   contents: read
   packages: write
