@@ -53,8 +53,8 @@ jobs:
         with:
           version: 'latest'
 
+      # Escribir KUBECONFIG desde el secreto (texto plano o base64)
       - name: Configure KUBECONFIG (STAGING)
-        if: ${{ secrets.KUBECONFIG_STAGING != '' }}
         shell: bash
         run: |
           mkdir -p "$HOME/.kube"
