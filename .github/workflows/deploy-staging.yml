@@ -3,12 +3,17 @@ name: STAGING – Build & Deploy
 on:
   push:
     branches: [ "master" ]
-  workflow_dispatch: {}
+  workflow_dispatch:   # <- habilita el botón "Run workflow"
 
-# 🔐 Necesario para publicar en GHCR con GITHUB_TOKEN
+# Permisos necesarios para que el GITHUB_TOKEN publique en GHCR
 permissions:
   contents: read
   packages: write
+
+# Evita superponer ejecuciones si lanzas varias seguidas
+concurrency:
+  group: staging-deploy
+  cancel-in-progress: true
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/myapp-api
@@ -19,12 +24,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1) Traer código
       - name: Checkout
         uses: actions/checkout@v4
 
+      # 2) Diagnóstico de estructura del repo
       - name: Diagnóstico (árbol del repo)
-        run: ls -lahR .
+        run: |
+          echo "Branch: ${{ github.ref }}"
+          pwd
+          ls -lah
+          echo "Contenido de TestContainer/"
+          ls -lah TestContainer
 
+      # 3) Login a GHCR con GITHUB_TOKEN (ya habilitaste Read & Write en Settings → Actions)
       - name: Login GHCR (GITHUB_TOKEN)
         uses: docker/login-action@v3
         with:
@@ -32,6 +45,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # 4) Build & push de la imagen usando la subcarpeta del proyecto .NET
       - name: Build & Push (carpeta TestContainer)
         uses: docker/build-push-action@v5
         with:
@@ -40,10 +54,13 @@ jobs:
           push: true
           tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
+      # 5) Instalar kubectl
       - name: Instalar kubectl
         uses: azure/setup-kubectl@v4
+        with:
+          version: 'latest'
 
-      # ⬇️ Nuevo: escribir kubeconfig desde secreto (texto plano o base64)
+      # 6) Escribir KUBECONFIG (funciona si guardaste el secreto en texto plano o en base64)
       - name: Configurar KUBECONFIG (STAGING)
         if: ${{ secrets.KUBECONFIG_STAGING != '' }}
         shell: bash
@@ -58,19 +75,33 @@ jobs:
         env:
           KUBECONFIG_STAGING: ${{ secrets.KUBECONFIG_STAGING }}
 
+      # 7) Prueba de conexión al cluster (antes de aplicar)
       - name: Probar conexión a clúster
         run: |
           kubectl version --short
           kubectl get ns
-          kubectl -n staging get deploy,svc,ingress
+          kubectl -n staging get deploy,svc,ingress || true
 
+      # 8) (Opcional) Alinear imagen en el deployment.yaml al tag esperado del job
+      #    Si tu archivo ya tiene :staging, puedes omitir este paso.
+      - name: Reemplazar imagen en deployment.yaml a :staging
+        run: |
+          sed -i "s|image: .*|image: $IMAGE_NAME:$IMAGE_TAG|g" ./TestContainer/deployment.yaml
+          echo "deployment.yaml tras sed:"
+          sed -n '1,180p' ./TestContainer/deployment.yaml
+
+      # 9) Aplicar manifiestos
       - name: Aplicar manifiestos (STAGING)
         run: |
           kubectl -n staging apply -f TestContainer/deployment.yaml
           kubectl -n staging apply -f TestContainer/service.yaml
           kubectl -n staging apply -f TestContainer/ingress.yaml
 
+      # 10) Esperar rollout y mostrar estado
       - name: Esperar rollout
         run: |
           kubectl -n staging rollout status deploy/myapp-api --timeout=300s
+          echo "Pods en staging:"
           kubectl -n staging get pods -o wide
+          echo "Ingress en staging:"
+          kubectl -n staging describe ingress myapp-api | sed -n '/Rules/,$p'
