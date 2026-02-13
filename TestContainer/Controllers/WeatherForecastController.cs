@@ -32,5 +32,10 @@ namespace TestContainer.Controllers
 
         [HttpGet("hola")]
         public string Hola() => "Hola Luis, cambio desde CI/CD automatizado!";
+
+
+        [HttpGet("version")]
+        public string Version() => "v2 - cambio automatizado";
+
     }
 }
