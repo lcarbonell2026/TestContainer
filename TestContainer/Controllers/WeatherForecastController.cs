@@ -35,7 +35,8 @@ namespace TestContainer.Controllers
 
 
         [HttpGet("version")]
-        public string Version() => "v2 - cambio automatizado";
+        public string Version() => "v1 - Deploy automatizado OK";
+
 
     }
 }
