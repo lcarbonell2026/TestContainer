@@ -22,7 +22,7 @@ jobs:
   build-and-deploy:
     runs-on: self-hosted
     steps:
-      # 1) Traer código
+      # 1) Traer código1
       - name: Checkout
         uses: actions/checkout@v4
 
