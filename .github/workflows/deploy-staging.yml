@@ -20,7 +20,7 @@ env:
 
 jobs:
   build-and-deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       # 1) Traer código
       - name: Checkout
