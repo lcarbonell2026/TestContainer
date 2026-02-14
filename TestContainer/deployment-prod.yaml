@@ -2,9 +2,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: myapp-api
-  namespace: production
+  namespace: prod
 spec:
-  replicas: 3
+  replicas: 2
   selector:
     matchLabels:
       app: myapp-api
@@ -13,20 +13,31 @@ spec:
       labels:
         app: myapp-api
     spec:
-      imagePullSecrets:
-        - name: ghcr-pull-secret
+      # Mantén esto solo si tienes creado el secret en prod (si no, elimínalo):
+      # imagePullSecrets:
+      # - name: ghcr-pull-secret
+
       containers:
-        - name: myapp-api
-          image: ghcr.io/lcarbonell2026/myapp-api:prod
-          ports:
-            - containerPort: 8080
-          readinessProbe:
-            httpGet:
-              path: /weatherforecast
-              port: 8080
-            initialDelaySeconds: 15
-          livenessProbe:
-            httpGet:
-              path: /weatherforecast
-              port: 8080
-            initialDelaySeconds: 30
+      - name: myapp-api
+        # El workflow por TAGs reemplazará este valor con :sha-${{ github.sha }}
+        image: ghcr.io/lcarbonell2026/myapp-api:sha-REEMPLAZAR_EN_PIPELINE
+        ports:
+        - containerPort: 80
+
+        readinessProbe:
+          httpGet:
+            path: /weatherforecast
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
+
+        livenessProbe:
+          httpGet:
+            path: /weatherforecast
+            port: 80
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 5

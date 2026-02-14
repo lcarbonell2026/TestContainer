@@ -1,10 +1,13 @@
 name: PROD – Build & Deploy
+
 on:
   push:
-    branches: [ "prod" ]
-  workflow_dispatch: {}
+    tags:
+      - 'v*.*.*'
+# (Opcional) también permitir ejecución manual desde Actions:
+# workflow_dispatch: {}
 
-# Recomendado también concurrency en prod (no cancelar en progreso)
+# Evita superponer despliegues de prod
 concurrency:
   group: prod-deploy
   cancel-in-progress: false
@@ -17,66 +20,65 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v4
 
-      # Login GHCR con PAT (como ya tienes configurado en secretos)
-      - name: Login GHCR (PAT)
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.CR_PAT_PROD }}
+    # Login GHCR con PAT (como ya tienes configurado en secretos)
+    - name: Login GHCR (PAT)
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.CR_PAT_PROD }}
 
-      - name: Build & Push (carpeta TestContainer)
-        uses: docker/build-push-action@v5
-        with:
-          context: ./TestContainer
-          file: ./TestContainer/Dockerfile
-          push: true
-          # Publica 'prod' + 'sha-<commit>'
-          tags: |
-            ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-            ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+    - name: Build & Push (carpeta TestContainer)
+      uses: docker/build-push-action@v5
+      with:
+        context: ./TestContainer
+        file: ./TestContainer/Dockerfile
+        push: true
+        # Publica 'prod' + 'sha-<commit>'
+        tags: |
+          ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
 
-      - name: Instalar kubectl
-        uses: azure/setup-kubectl@v4
-        with:
-          version: 'latest'
+    - name: Instalar kubectl
+      uses: azure/setup-kubectl@v4
+      with:
+        version: 'latest'
 
-      - name: Configurar kubeconfig PROD
-        shell: bash
-        run: |
-          mkdir -p $HOME/.kube
-          if echo "${KUBECONFIG_PROD}" | head -n1 | grep -q "apiVersion:"; then
-            echo "${KUBECONFIG_PROD}" > $HOME/.kube/config
-          else
-            echo "${KUBECONFIG_PROD}" | base64 -d > $HOME/.kube/config
-          fi
-          chmod 600 $HOME/.kube/config
-        env:
-          KUBECONFIG_PROD: ${{ secrets.KUBECONFIG_PROD }}
+    - name: Configurar kubeconfig PROD
+      shell: bash
+      env:
+        KUBECONFIG_PROD: ${{ secrets.KUBECONFIG_PROD }}
+      run: |
+        mkdir -p $HOME/.kube
+        if echo "${KUBECONFIG_PROD}" | head -n1 | grep -q "apiVersion:"; then
+          echo "${KUBECONFIG_PROD}" > $HOME/.kube/config
+        else
+          echo "${KUBECONFIG_PROD}" | base64 -d > $HOME/.kube/config
+        fi
+        chmod 600 $HOME/.kube/config
 
-      # Aplica manifiestos de prod
-      - name: Aplicar manifiestos PROD (namespace prod)
-        run: |
-          kubectl -n prod apply -f ./TestContainer/deployment-prod.yaml
-          kubectl -n prod apply -f ./TestContainer/service-prod.yaml
-          kubectl -n prod apply -f ./TestContainer/ingress-prod.yaml
+    # Aplica manifiestos de prod (idempotente). Si prefieres no reaplicar, puedes quitar este paso.
+    - name: Aplicar manifiestos PROD (namespace prod)
+      run: |
+        kubectl -n prod apply -f ./TestContainer/deployment-prod.yaml
+        kubectl -n prod apply -f ./TestContainer/service-prod.yaml
+        kubectl -n prod apply -f ./TestContainer/ingress-prod.yaml
 
-      # Forzar imagen al tag inmutable (SHA)
-      - name: Forzar imagen a sha-${{ github.sha }}
-        env:
-          SHA_TAG: sha-${{ github.sha }}
-        run: |
-          kubectl -n prod set image deploy/myapp-api myapp-api=${IMAGE_NAME}:${SHA_TAG}
-          echo "Imagen efectiva:"
-          kubectl -n prod get deploy myapp-api -o=jsonpath='{.spec.template.spec.containers[0].image}'; echo
+    # Forzar imagen con el tag inmutable (SHA)
+    - name: Forzar imagen a sha-${{ github.sha }}
+      env:
+        SHA_TAG: sha-${{ github.sha }}
+      run: |
+        kubectl -n prod set image deploy/myapp-api myapp-api=${IMAGE_NAME}:${SHA_TAG}
+        echo "Imagen efectiva:"
+        kubectl -n prod get deploy myapp-api -o=jsonpath='{.spec.template.spec.containers[0].image}'; echo
 
-      # Esperar rollout + estado
-      - name: Esperar rollout
-        run: |
-          kubectl -n prod rollout status deploy/myapp-api --timeout=300s
-          kubectl -n prod get pods -o wide
+    - name: Esperar rollout + estado
+      run: |
+        kubectl -n prod rollout status deploy/myapp-api --timeout=300s
+        kubectl -n prod get pods -o wide
